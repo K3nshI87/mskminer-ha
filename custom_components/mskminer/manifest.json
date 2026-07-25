@@ -1,0 +1,11 @@
+{
+  "domain": "mskminer",
+  "name": "MSKMiner",
+  "documentation": "https://github.com/K3nshI87/mskminer-ha",
+  "requirements": [],
+  "dependencies": [],
+  "codeowners": [],
+  "version": "0.1.0",
+  "iot_class": "local_polling",
+  "config_flow": true
+}

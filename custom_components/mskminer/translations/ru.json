@@ -1,0 +1,42 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Настройка MSKMiner",
+        "description": "Укажите диапазон IP-адресов для сканирования (например: {example}). Интеграция автоматически найдёт все майнеры в сети.",
+        "data": {
+          "ip_range": "Диапазон IP-адресов",
+          "username": "Имя пользователя",
+          "password": "Пароль"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Не удалось подключиться к сети",
+      "invalid_auth": "Неверное имя пользователя или пароль",
+      "no_miners_found": "Майнеры MSKMiner не найдены в указанном диапазоне"
+    },
+    "abort": {
+      "already_configured": "Интеграция уже настроена"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "hashrate": { "name": "Хэшрейт" },
+      "avg_hashrate": { "name": "Средний хэшрейт" },
+      "temp_outlet": { "name": "Температура (выход)" },
+      "temp_inlet": { "name": "Температура (вход)" },
+      "power": { "name": "Потребление" },
+      "uptime": { "name": "Время работы" },
+      "psu_fan": { "name": "Вентилятор БП" },
+      "psu_temp": { "name": "Температура БП" },
+      "active_pool": { "name": "Активный пул" },
+      "miner_status": { "name": "Статус" }
+    },
+    "button": {
+      "restart_miner": { "name": "Перезапуск майнера" },
+      "reboot_device": { "name": "Перезагрузка устройства" },
+      "blink": { "name": "Мигать светодиодом" }
+    }
+  }
+}

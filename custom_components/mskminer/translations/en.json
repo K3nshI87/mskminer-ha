@@ -1,0 +1,42 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "MSKMiner Setup",
+        "description": "Enter the IP range to scan (e.g. {example}). The integration will automatically discover all miners on your network.",
+        "data": {
+          "ip_range": "IP Range",
+          "username": "Username",
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to the network",
+      "invalid_auth": "Invalid username or password",
+      "no_miners_found": "No MSKMiner devices found in the specified range"
+    },
+    "abort": {
+      "already_configured": "Already configured"
+    }
+  },
+  "entity": {
+    "sensor": {
+      "hashrate": { "name": "Hashrate" },
+      "avg_hashrate": { "name": "Avg Hashrate" },
+      "temp_outlet": { "name": "Temperature (Outlet)" },
+      "temp_inlet": { "name": "Temperature (Inlet)" },
+      "power": { "name": "Power" },
+      "uptime": { "name": "Uptime" },
+      "psu_fan": { "name": "PSU Fan Speed" },
+      "psu_temp": { "name": "PSU Temperature" },
+      "active_pool": { "name": "Active Pool" },
+      "miner_status": { "name": "Status" }
+    },
+    "button": {
+      "restart_miner": { "name": "Restart Miner" },
+      "reboot_device": { "name": "Reboot Device" },
+      "blink": { "name": "Blink LED" }
+    }
+  }
+}
