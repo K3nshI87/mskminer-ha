@@ -40,7 +40,13 @@ class MSKMinerAPI:
 
     async def _ensure_session(self) -> aiohttp.ClientSession:
         if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession()
+            # unsafe=True allows storing cookies from IP-address hosts.
+            # By default aiohttp rejects such cookies per RFC, but miners
+            # are accessed by IP so the session cookie would be silently
+            # dropped and every request after login returns 401.
+            self._session = aiohttp.ClientSession(
+                cookie_jar=aiohttp.CookieJar(unsafe=True)
+            )
             await self._login()
         return self._session
 
