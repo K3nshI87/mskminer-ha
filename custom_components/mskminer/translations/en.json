@@ -37,6 +37,9 @@
       "restart_miner": { "name": "Restart Miner" },
       "reboot_device": { "name": "Reboot Device" },
       "blink": { "name": "Blink LED" }
+    },
+    "switch": {
+      "mining": { "name": "Mining" }
     }
   }
 }
