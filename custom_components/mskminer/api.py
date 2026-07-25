@@ -44,27 +44,56 @@ class MSKMinerAPI:
         return self._session
 
     async def _login(self) -> None:
-        # Replicate requests files={} → multipart/form-data + HTTP Basic Auth
-        writer = aiohttp.MultipartWriter("form-data")
-        part = writer.append(self.username)
-        part.set_content_disposition("form-data", name="username")
-        part = writer.append(self.password)
-        part.set_content_disposition("form-data", name="password")
+        # The API requires multipart/form-data + HTTP Basic Auth (same as
+        # requests with files={"username": (None, u), "password": (None, p)}).
+        # We try three encodings in order so the client works even if the
+        # server is lenient about Content-Type.
+        basic_auth = aiohttp.BasicAuth(self.username, self.password)
+        last_err: Exception | None = None
 
-        try:
-            async with self._session.post(
-                f"{self.base_url}/admin/login",
-                auth=aiohttp.BasicAuth(self.username, self.password),
-                data=writer,
-                timeout=LOGIN_TIMEOUT,
-            ) as resp:
-                if resp.status in (401, 403):
-                    raise InvalidAuth(f"Bad credentials for {self.host}")
-                resp.raise_for_status()
-        except InvalidAuth:
-            raise
-        except aiohttp.ClientError as err:
-            raise CannotConnect(f"Login failed for {self.host}: {err}") from err
+        for payload in self._login_payloads():
+            try:
+                async with self._session.post(
+                    f"{self.base_url}/admin/login",
+                    auth=basic_auth,
+                    timeout=LOGIN_TIMEOUT,
+                    **payload,
+                ) as resp:
+                    if resp.status in (401, 403):
+                        raise InvalidAuth(f"Bad credentials for {self.host}")
+                    if resp.ok:
+                        return  # success
+            except InvalidAuth:
+                raise
+            except aiohttp.ClientError as err:
+                last_err = err
+                continue
+
+        raise CannotConnect(
+            f"Login failed for {self.host}: {last_err}"
+        ) from last_err
+
+    def _login_payloads(self) -> list[dict]:
+        # 1. multipart/form-data — exact replica of requests files={}
+        writer = aiohttp.MultipartWriter("form-data")
+        part = writer.append(self.username.encode())
+        part.set_content_disposition("form-data", name="username")
+        part.headers.pop("Content-Type", None)
+        part = writer.append(self.password.encode())
+        part.set_content_disposition("form-data", name="password")
+        part.headers.pop("Content-Type", None)
+
+        # 2. multipart via FormData (aiohttp native)
+        form = aiohttp.FormData()
+        form.add_field("username", self.username, content_type="text/plain")
+        form.add_field("password", self.password, content_type="text/plain")
+
+        # 3. application/x-www-form-urlencoded (simplest fallback)
+        return [
+            {"data": writer},
+            {"data": form},
+            {"data": {"username": self.username, "password": self.password}},
+        ]
 
     async def _get(self, path: str) -> Any:
         session = await self._ensure_session()
