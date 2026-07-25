@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import logging
+import uuid
 from typing import Any
 
 import aiohttp
@@ -44,41 +45,39 @@ class MSKMinerAPI:
         return self._session
 
     async def _login(self) -> None:
-        basic_auth = aiohttp.BasicAuth(self.username, self.password)
-        last_err: Exception | None = None
+        # Build multipart/form-data body manually — exact replica of:
+        #   requests.post(url, files={"username": (None, u), "password": (None, p)})
+        # aiohttp's high-level helpers add Content-Type per part which some
+        # firmware versions reject, so we hand-craft the raw bytes instead.
+        boundary = "----WebKitFormBoundary" + uuid.uuid4().hex[:16]
+        body = (
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="username"\r\n'
+            f"\r\n"
+            f"{self.username}\r\n"
+            f"--{boundary}\r\n"
+            f'Content-Disposition: form-data; name="password"\r\n'
+            f"\r\n"
+            f"{self.password}\r\n"
+            f"--{boundary}--\r\n"
+        ).encode()
 
-        # Try multipart first (matches requests files={}), then urlencoded fallback.
-        for payload in (self._multipart_payload(), {"username": self.username, "password": self.password}):
-            is_form = isinstance(payload, dict)
-            kwargs = {"data": payload} if is_form else {"data": payload}
-            try:
-                async with self._session.post(
-                    f"{self.base_url}/admin/login",
-                    auth=basic_auth,
-                    timeout=LOGIN_TIMEOUT,
-                    **kwargs,
-                ) as resp:
-                    _LOGGER.debug(
-                        "Login attempt to %s → HTTP %s", self.host, resp.status
-                    )
-                    if resp.status in (401, 403):
-                        raise InvalidAuth(f"Bad credentials for {self.host}")
-                    if resp.ok:
-                        return
-                    last_err = Exception(f"HTTP {resp.status}")
-            except InvalidAuth:
-                raise
-            except aiohttp.ClientError as err:
-                _LOGGER.debug("Login network error %s: %s", self.host, err)
-                last_err = err
-
-        raise CannotConnect(f"Login failed for {self.host}: {last_err}") from last_err
-
-    def _multipart_payload(self) -> aiohttp.FormData:
-        form = aiohttp.FormData()
-        form.add_field("username", self.username, content_type="text/plain")
-        form.add_field("password", self.password, content_type="text/plain")
-        return form
+        try:
+            async with self._session.post(
+                f"{self.base_url}/admin/login",
+                auth=aiohttp.BasicAuth(self.username, self.password),
+                data=body,
+                headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
+                timeout=LOGIN_TIMEOUT,
+            ) as resp:
+                _LOGGER.debug("Login %s → HTTP %s", self.host, resp.status)
+                if resp.status in (401, 403):
+                    raise InvalidAuth(f"Bad credentials for {self.host}")
+                resp.raise_for_status()
+        except InvalidAuth:
+            raise
+        except aiohttp.ClientError as err:
+            raise CannotConnect(f"Login failed for {self.host}: {err}") from err
 
     async def _get(self, path: str) -> Any:
         session = await self._ensure_session()
@@ -187,15 +186,16 @@ async def _probe_host(
     api = MSKMinerAPI(ip, username, password)
     try:
         data = await asyncio.wait_for(api.get_info(), timeout=timeout)
-        if data:
-            _LOGGER.debug("MSKMiner found at %s", ip)
+        if data is not None:  # {} or null would fail "if data:" but still means connected
+            _LOGGER.warning("MSKMiner found at %s", ip)
             return ip
+        _LOGGER.warning("%s: connected but got empty response", ip)
     except asyncio.TimeoutError:
         _LOGGER.debug("%s: timeout", ip)
     except InvalidAuth:
         _LOGGER.warning("%s: connected but credentials rejected", ip)
     except CannotConnect as err:
-        _LOGGER.debug("%s: cannot connect — %s", ip, err)
+        _LOGGER.warning("%s: cannot connect — %s", ip, err)
     except Exception as err:
         _LOGGER.warning("%s: unexpected error — %s: %s", ip, type(err).__name__, err)
     finally:
@@ -229,6 +229,10 @@ async def discover_miners(
                 found.append(result)
 
     await asyncio.gather(*[check(ip) for ip in hosts], return_exceptions=True)
+    _LOGGER.warning(
+        "MSKMiner scan of %s complete: found %d device(s): %s",
+        ip_range, len(found), found,
+    )
     return sorted(found, key=lambda x: tuple(int(o) for o in x.split(".")))
 
 
