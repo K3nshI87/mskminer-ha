@@ -37,10 +37,16 @@ BUTTON_TYPES: tuple[MinerButtonDescription, ...] = (
         action=lambda api: api.reboot_device(),
     ),
     MinerButtonDescription(
-        key="blink",
+        key="blink_led",
         name="Blink LED",
         icon="mdi:led-on",
-        action=lambda api: api.blink_start(),
+        action=lambda api: api.set_led(True),
+    ),
+    MinerButtonDescription(
+        key="clear_errors",
+        name="Clear Errors",
+        icon="mdi:alert-remove",
+        action=lambda api: api.clear_errors(),
     ),
 )
 

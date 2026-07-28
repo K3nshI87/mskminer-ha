@@ -87,38 +87,68 @@ class MSKMinerAPI:
 
     async def _get(self, path: str) -> Any:
         session = await self._ensure_session()
-        try:
-            async with session.get(
-                f"{self.api_url}/{path}", timeout=REQUEST_TIMEOUT
-            ) as resp:
-                if resp.status in (401, 403):
-                    # Session expired — re-login once
-                    await self._login()
-                    async with session.get(
-                        f"{self.api_url}/{path}", timeout=REQUEST_TIMEOUT
-                    ) as resp2:
-                        resp2.raise_for_status()
-                        return await resp2.json(content_type=None)
-                resp.raise_for_status()
-                return await resp.json(content_type=None)
-        except (InvalidAuth, CannotConnect):
-            raise
-        except aiohttp.ClientError as err:
-            raise CannotConnect(f"{self.host} request failed: {err}") from err
+        for url in (f"{self.api_url}/{path}", f"{self.base_url}/{path}"):
+            try:
+                async with session.get(url, timeout=REQUEST_TIMEOUT) as resp:
+                    if resp.status == 404:
+                        continue
+                    if resp.status in (401, 403):
+                        await self._login()
+                        async with session.get(url, timeout=REQUEST_TIMEOUT) as resp2:
+                            resp2.raise_for_status()
+                            return await resp2.json(content_type=None)
+                    resp.raise_for_status()
+                    return await resp.json(content_type=None)
+            except (InvalidAuth, CannotConnect):
+                raise
+            except aiohttp.ClientResponseError as err:
+                if err.status == 404:
+                    continue
+                raise CannotConnect(f"{self.host} request failed: {err}") from err
+            except aiohttp.ClientError as err:
+                raise CannotConnect(f"{self.host} request failed: {err}") from err
+        raise CannotConnect(f"{self.host}: endpoint not found: {path}")
 
     async def _post(self, path: str, json: dict | None = None) -> Any:
         session = await self._ensure_session()
-        try:
-            async with session.post(
-                f"{self.api_url}/{path}", json=json, timeout=REQUEST_TIMEOUT
-            ) as resp:
-                resp.raise_for_status()
-                try:
-                    return await resp.json(content_type=None)
-                except Exception:
-                    return {}
-        except aiohttp.ClientError as err:
-            raise CannotConnect(f"{self.host} request failed: {err}") from err
+        # Try /api/<path> first, fall back to /<path> if 404
+        for url in (f"{self.api_url}/{path}", f"{self.base_url}/{path}"):
+            try:
+                async with session.post(url, json=json, timeout=REQUEST_TIMEOUT) as resp:
+                    if resp.status == 404:
+                        continue
+                    resp.raise_for_status()
+                    try:
+                        return await resp.json(content_type=None)
+                    except Exception:
+                        return {}
+            except aiohttp.ClientResponseError as err:
+                if err.status == 404:
+                    continue
+                raise CannotConnect(f"{self.host} request failed: {err}") from err
+            except aiohttp.ClientError as err:
+                raise CannotConnect(f"{self.host} request failed: {err}") from err
+        raise CannotConnect(f"{self.host}: endpoint not found: {path}")
+
+    async def _delete(self, path: str) -> Any:
+        session = await self._ensure_session()
+        for url in (f"{self.api_url}/{path}", f"{self.base_url}/{path}"):
+            try:
+                async with session.delete(url, timeout=REQUEST_TIMEOUT) as resp:
+                    if resp.status == 404:
+                        continue
+                    resp.raise_for_status()
+                    try:
+                        return await resp.json(content_type=None)
+                    except Exception:
+                        return {}
+            except aiohttp.ClientResponseError as err:
+                if err.status == 404:
+                    continue
+                raise CannotConnect(f"{self.host} request failed: {err}") from err
+            except aiohttp.ClientError as err:
+                raise CannotConnect(f"{self.host} request failed: {err}") from err
+        raise CannotConnect(f"{self.host}: endpoint not found: {path}")
 
     # ------------------------------------------------------------------
     # Monitoring
@@ -128,24 +158,17 @@ class MSKMinerAPI:
         """Fetch all data via /api/info_app."""
         return await self._get("info_app")
 
-    async def get_status(self) -> dict[str, Any]:
-        return await self._get("status")
-
-    async def get_power(self) -> dict[str, Any]:
-        return await self._get("power")
-
-    async def get_uptime(self) -> dict[str, Any]:
-        return await self._get("uptime")
-
     async def get_pools(self) -> dict[str, Any]:
         return await self._get("pools")
 
-    async def get_miner_status(self) -> dict[str, Any]:
-        return await self._get("miner_status")
+    async def get_pools_status(self) -> dict[str, Any]:
+        return await self._get("pools/status")
 
-    async def is_stopped(self) -> bool:
-        data = await self._get("miner_stopped")
-        return bool(data.get("stopped", False))
+    async def get_power_limit(self) -> dict[str, Any]:
+        return await self._get("power_limit")
+
+    async def get_summary(self) -> dict[str, Any]:
+        return await self._get("summary")
 
     # ------------------------------------------------------------------
     # Control
@@ -153,23 +176,26 @@ class MSKMinerAPI:
 
     async def restart_miner(self) -> None:
         """Restart mining process (soft restart)."""
-        await self._post("miner_restart")
+        await self._post("restart")
 
     async def reboot_device(self) -> None:
         """Reboot the physical device."""
         await self._post("reboot")
 
-    async def pause_mining(self) -> None:
-        await self._post("miner_pause")
+    async def suspend_mining(self) -> None:
+        await self._post("suspend")
 
     async def resume_mining(self) -> None:
-        await self._post("miner_resume")
+        await self._post("resume")
 
-    async def blink_start(self) -> None:
-        await self._post("blink/start")
+    async def set_led(self, enabled: bool) -> None:
+        await self._post("led", json={"enabled": enabled})
 
-    async def blink_stop(self) -> None:
-        await self._post("blink/stop")
+    async def clear_errors(self) -> None:
+        await self._delete("clear_errors")
+
+    async def set_cool_mode(self, mode: str) -> None:
+        await self._post("cool_mode", json={"mode": mode})
 
     # ------------------------------------------------------------------
     # Cleanup

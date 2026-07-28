@@ -13,7 +13,7 @@ from .coordinator import MinerCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = [Platform.SENSOR, Platform.BUTTON, Platform.SWITCH]
+PLATFORMS = [Platform.SENSOR, Platform.BUTTON, Platform.SWITCH, Platform.SELECT]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
